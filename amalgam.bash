@@ -72,7 +72,7 @@ find_bad_clients | tee malicious_clients.new
 
 diff -u malicious_clients.old malicious_clients.new
 
-cat malicious_clients.new malicious_clients | sort -V | uniq > malicious_clients
+cat malicious_clients.new malicious_clients.old malicious_clients | sort -V | uniq > malicious_clients
 
 rm malicious_clients.old malicious_clients.new
 
