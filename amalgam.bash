@@ -15,7 +15,7 @@ function find_bad_clients() (
 		cat "$log_tmp" \
 			| rg -i "failed password|invalid user|connection closed by" \
 			| rg -i '([\da-f\.:]+) port \d+' -or '$1' \
-			| sort -n \
+			| sort -V \
 			| uniq
 	}
 
@@ -23,7 +23,7 @@ function find_bad_clients() (
 		cat "$log_tmp" \
 			| rg -i 'accepted' \
 			| rg -i '([\da-f\.:]+) port \d+' -or '$1' \
-			| sort -n \
+			| sort -V \
 			| uniq
 	}
 
@@ -72,7 +72,7 @@ find_bad_clients | tee malicious_clients.new
 
 diff -u malicious_clients.old malicious_clients.new
 
-cat malicious_clients.new malicious_clients | sort -n | uniq > malicious_clients
+cat malicious_clients.new malicious_clients | sort -V | uniq > malicious_clients
 
 rm malicious_clients.old malicious_clients.new
 
