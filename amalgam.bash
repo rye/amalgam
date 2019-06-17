@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -x
-
 cp malicious_clients malicious_clients.old
 
 function find_bad_clients() (
