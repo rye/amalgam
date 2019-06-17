@@ -72,6 +72,6 @@ cat malicious_clients.new malicious_clients.old malicious_clients | sort -V | un
 
 diff -u malicious_clients.old malicious_clients
 
-rm malicious_clients.old malicious_clients.new
+rm -v malicious_clients.old malicious_clients.new
 
 generate_new_iptables_commands > bombs_away.sh
