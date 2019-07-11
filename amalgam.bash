@@ -55,7 +55,10 @@ rm -v malicious_clients.old malicious_clients.new
 
 for ip in $(cat malicious_clients);
 do
-	if iptables -C INPUT -s "${ip}" -j DROP 2>/dev/null;
+	if echo "${ip}" | rg -q '^[\d\.]+$' && iptables -C INPUT -s "${ip}" -j DROP 2>/dev/null;
+	then
+		echo -e " \u25cc ${ip} (already dropped)"
+	elif echo "${ip}" | rg -q '^[\da-fA-F:]+$' && ip6tables -C INPUT -s "${ip}" -j DROP 2>/dev/null;
 	then
 		echo -e " \u25cc ${ip} (already dropped)"
 	else
@@ -67,12 +70,19 @@ read -p "Continue? [y/N]: " confirm && [[ $confirm == [yY] || $confirm == [yY][e
 
 for ip in $(cat malicious_clients);
 do
-	if ! iptables -C INPUT -s "${ip}" -j DROP 2>/dev/null;
+	if echo "${ip}" | rg -q '^[\d\.]+$' && ! iptables -C INPUT -s "${ip}" -j DROP 2>/dev/null;
 	then
-		echo -e " \u25cb Dropping ${ip}..."
+		echo -e " \u25cb Dropping ${ip} (v4)..."
 
 		set -x
 		iptables -w -A INPUT -s "${ip}" -j DROP
+		{ set +x; } 2>/dev/null
+	elif echo "${ip}" | rg -q '^[\da-fA-F:]+$' && ! ip6tables -C INPUT -s "${ip}" -j DROP 2>/dev/null;
+	then
+		echo -e " \u25cb Dropping ${ip} (v6)..."
+
+		set -x
+		ip6tables -w -A INPUT -s "${ip}" -j DROP
 		{ set +x; } 2>/dev/null
 	fi
 done
