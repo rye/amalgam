@@ -43,6 +43,55 @@ function find_bad_clients() (
 	rm -rf "$log_tmp" "$offenders" "$accepts"
 )
 
+function is_ipv4() (
+	echo "$1" | rg -q '^[\d\.]+$'
+)
+
+function is_ipv4_ipset() (
+	sudo ipset list -t "$1" | rg -q -U --multiline-dotall 'Name: (.*?)$.*?^Header: .*? \binet\b'
+)
+
+function is_ipv6() (
+	echo "$1" | rg -q '^[\da-fA-F:]$'
+)
+
+function is_ipv6_ipset() (
+	sudo ipset list -t "$1" | rg -q -U --multiline-dotall 'Name: (.*?)$.*?^Header: .*? \binet6\b'
+)
+
+function ipset_contains_ip() (
+	is_ipv4 "$2" && is_ipv4_ipset "$ipset" && { set -x; ipset test "$1" "$2"; { set +x; } 2>/dev/null; } && exit "$?"
+	is_ipv6 "$2" && is_ipv6_ipset "$ipset" && { set -x; ipset test "$1" "$2"; { set +x; } 2>/dev/null; } && exit "$?"
+	exit 1
+)
+
+function ipsets_block_ip() (
+	ipsets=`iptables -w -nL | rg -or '$1' '^DROP .* match-set \b(\w*)\b src'`
+	for ipset in $ipsets;
+	do
+		{ ipset_contains_ip "$ipset" "$1" 2>&1 | rg -q 'is in'; } && exit 0
+	done
+	exit 1
+)
+
+
+function ipsets_block_ip6() (
+	ipsets=`ip6tables -w -nL | rg -or '$1' '^DROP .* match-set \b(\w*)\b src'`
+	for ipset in "${ipsets}";
+	do
+		{ ipset_contains_ip "$ipset" "$1" 2>&1 | rg -q 'is in'; } && exit 0
+	done
+	exit 1
+)
+
+function ip_is_blocked() (
+	iptables -C INPUT -s "$1" -j DROP 2>/dev/null || ipsets_block_ip "$1"
+)
+
+function ip6_is_blocked() (
+	ip6tables -C INPUT -s "$1" -j DROP 2>/dev/null || ipsets_block_ip6 "$1"
+)
+
 find_bad_clients | tee malicious_clients.new
 
 cat malicious_clients.new malicious_clients.old malicious_clients | sort -V | uniq > malicious_clients
@@ -55,10 +104,10 @@ rm -v malicious_clients.old malicious_clients.new
 
 for ip in $(cat malicious_clients);
 do
-	if echo "${ip}" | rg -q '^[\d\.]+$' && iptables -C INPUT -s "${ip}" -j DROP 2>/dev/null;
+	if echo "${ip}" | rg -q '^[\d\.]+$' && ip_is_blocked "${ip}";
 	then
 		echo -e " \u25cc ${ip} (already dropped)"
-	elif echo "${ip}" | rg -q '^[\da-fA-F:]+$' && ip6tables -C INPUT -s "${ip}" -j DROP 2>/dev/null;
+	elif echo "${ip}" | rg -q '^[\da-fA-F:]+$' && ip6_is_blocked "${ip}";
 	then
 		echo -e " \u25cc ${ip} (already dropped)"
 	else
@@ -70,14 +119,14 @@ read -p "Continue? [y/N]: " confirm && [[ $confirm == [yY] || $confirm == [yY][e
 
 for ip in $(cat malicious_clients);
 do
-	if echo "${ip}" | rg -q '^[\d\.]+$' && ! iptables -C INPUT -s "${ip}" -j DROP 2>/dev/null;
+	if echo "${ip}" | rg -q '^[\d\.]+$' && ! ip_is_blocked "${ip}";
 	then
 		echo -e " \u25cb Dropping ${ip} (v4)..."
 
 		set -x
 		iptables -w -A INPUT -s "${ip}" -j DROP
 		{ set +x; } 2>/dev/null
-	elif echo "${ip}" | rg -q '^[\da-fA-F:]+$' && ! ip6tables -C INPUT -s "${ip}" -j DROP 2>/dev/null;
+	elif echo "${ip}" | rg -q '^[\da-fA-F:]+$' && ! ip6_is_blocked "${ip}";
 	then
 		echo -e " \u25cb Dropping ${ip} (v6)..."
 
