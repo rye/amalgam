@@ -1,0 +1,6 @@
+#!/bin/bash
+
+set -e -o pipefail
+
+curl "https://api.bgpview.io/asn/$1/prefixes" \
+	| jq -r '.data | .ipv4_prefixes, .ipv6_prefixes | .[].prefix'
