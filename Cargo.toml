@@ -1,9 +1,9 @@
 [package]
 name = "amalgam"
+publish = false
 version = "0.1.0"
 authors = ["Kristofer Rye <kristofer.rye@gmail.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
+netaddr2 = "~0.6.1"
