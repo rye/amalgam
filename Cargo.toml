@@ -5,10 +5,11 @@ version = '0.1.0'
 authors = ['Kristofer Rye <kristofer.rye@gmail.com>']
 edition = '2018'
 
-[dependencies]
-netaddr2 = '~0.6.1'
-config = { version = '~0.10.1', default-features = false, features = ['json', 'toml', 'yaml', 'ini'] }
-
 [features]
 default = []
 config-hjson = ['config/hjson']
+
+[dependencies]
+netaddr2 = '~0.6.1'
+clap = '~2.31'
+config = { version = '~0.10.1', default-features = false, features = ['json', 'toml', 'yaml', 'ini'] }
