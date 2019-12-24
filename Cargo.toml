@@ -10,6 +10,6 @@ default = []
 config-hjson = ['config/hjson']
 
 [dependencies]
-netaddr2 = '~0.6.1'
-clap = '~2.31'
+netaddr2 = '~0.7.0'
+clap = '~2.33'
 config = { version = '~0.10.1', default-features = false, features = ['json', 'toml', 'yaml', 'ini'] }
