@@ -46,5 +46,7 @@ fn main() -> Result<()> {
 
 	// Finally, `settings` is now ready for consumption.
 
+	println!("{}", settings.get::<String>("input.type")?);
+
 	Ok(())
 }

@@ -1,25 +1,28 @@
 use config::ConfigError;
+use core::fmt::{self, Debug, Display, Formatter};
+use core::result;
+use std::error;
 
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Error {
-	ConfigInvalidError(ConfigError),
+	InvalidConfig(ConfigError),
 }
 
-impl core::fmt::Display for Error {
-	fn fmt(&self, f: &mut core::fmt::Formatter) -> core::result::Result<(), core::fmt::Error> {
+impl Display for Error {
+	fn fmt(&self, f: &mut Formatter) -> result::Result<(), fmt::Error> {
 		write!(f, "{}", match self {
-			Self::ConfigInvalidError(e) => format!("invalid config: {}", e),
+			Self::InvalidConfig(e) => format!("invalid config: {}", e),
 		})
 	}
 }
 
-impl std::error::Error for Error {}
+impl error::Error for Error {}
 
 impl From<ConfigError> for Error {
 	fn from(e: ConfigError) -> Error {
-		Error::ConfigInvalidError(e)
+		Error::InvalidConfig(e)
 	}
 }
 
-pub type Result<T> = core::result::Result<T, Error>;
+pub type Result<T> = result::Result<T, Error>;
