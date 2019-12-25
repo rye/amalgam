@@ -11,5 +11,7 @@ config-hjson = ['config/hjson']
 
 [dependencies]
 netaddr2 = '~0.7.0'
+chrono = '~0.4.10'
 clap = '~2.33'
 config = { version = '~0.10.1', default-features = false, features = ['json', 'toml', 'yaml', 'ini'] }
+serde_json = '~1.0'
