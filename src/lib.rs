@@ -3,6 +3,7 @@ use config::ConfigError;
 use core::convert::{TryFrom, TryInto};
 use core::fmt::{self, Debug, Display, Formatter};
 use core::result;
+use core::str::FromStr;
 use regex::{Captures, Regex};
 use std::error;
 use std::net::{IpAddr, SocketAddr};
@@ -27,7 +28,7 @@ lazy_static::lazy_static! {
 	static ref SSHD_LOGIN_RE: Regex = Regex::new(SSHD_LOGIN).unwrap();
 }
 
-impl core::str::FromStr for SshdEventKind {
+impl FromStr for SshdEventKind {
 	type Err = Error;
 
 	fn from_str(s: &str) -> Result<SshdEventKind> {
@@ -218,7 +219,7 @@ pub enum InputType {
 	JournaldJson,
 }
 
-impl core::str::FromStr for InputType {
+impl FromStr for InputType {
 	type Err = Error;
 
 	fn from_str(s: &str) -> Result<Self> {
