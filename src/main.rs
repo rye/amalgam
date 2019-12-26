@@ -1,6 +1,6 @@
 use amalgam::{Event, InputType, Result};
 use clap::{App, Arg};
-use core::convert::{TryFrom, TryInto};
+use core::convert::TryFrom;
 use serde_json::{from_str, Value};
 use std::io::{stdin, BufRead};
 
