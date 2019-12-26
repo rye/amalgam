@@ -1,5 +1,8 @@
-use amalgam::Result;
+use amalgam::{FailedLoginSshdMessage, InputType, Message, Result, SshdMessage};
 use clap::{App, Arg};
+use core::convert::{TryFrom, TryInto};
+use serde_json::{from_str, Value};
+use std::io::{stdin, BufRead};
 
 // At a high level, read:
 // - Log information (stdin)
@@ -46,7 +49,33 @@ fn main() -> Result<()> {
 
 	// Finally, `settings` is now ready for consumption.
 
-	println!("{}", settings.get::<String>("input.type")?);
+	println!(
+		"{:?}",
+		settings.get_str("input.type")?.parse::<InputType>()?
+	);
+
+	// Load up requisite stream
+
+	// Stream events as follows:
+	// - Read a line
+	// - Parse into Event
+	// - Check to see if allowed
+
+	let failed_logins: Vec<FailedLoginSshdMessage> = stdin()
+		.lock()
+		.lines()
+		.map(|line| -> Result<Message> {
+			let v: Value = from_str(&line?)?;
+			Message::try_from(v)
+		})
+		.filter_map(Result::ok)
+		.map(|message: Message| -> Result<SshdMessage> { message.try_into() })
+		.filter_map(Result::ok)
+		.map(|message: SshdMessage| -> Result<FailedLoginSshdMessage> { message.try_into() })
+		.filter_map(Result::ok)
+		.collect();
+
+	println!("{}", failed_logins.len());
 
 	Ok(())
 }
