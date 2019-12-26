@@ -16,7 +16,9 @@ dependencies = [
  "chrono",
  "clap",
  "config",
+ "lazy_static",
  "netaddr2",
+ "regex",
  "serde_json",
 ]
 

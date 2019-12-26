@@ -1,4 +1,4 @@
-use amalgam::{FailedLoginSshdMessage, InputType, Message, Result, SshdMessage};
+use amalgam::{Event, InputType, Result};
 use clap::{App, Arg};
 use core::convert::{TryFrom, TryInto};
 use serde_json::{from_str, Value};
@@ -36,6 +36,7 @@ fn main() -> Result<()> {
 
 	// Set defaults
 	settings.set_default("input.type", "journald-json")?;
+	settings.set_default("networks.allowed", vec!["127.0.0.0/8"])?;
 
 	// Load from the environment
 	settings.merge(config::Environment::with_prefix("AMALGAM"))?;
@@ -61,21 +62,22 @@ fn main() -> Result<()> {
 	// - Parse into Event
 	// - Check to see if allowed
 
-	let failed_logins: Vec<FailedLoginSshdMessage> = stdin()
+	let events: Vec<Event> = stdin()
 		.lock()
 		.lines()
-		.map(|line| -> Result<Message> {
+		.map(|line| -> Result<Event> {
 			let v: Value = from_str(&line?)?;
-			Message::try_from(v)
+			Event::try_from(v)
 		})
 		.filter_map(Result::ok)
-		.map(|message: Message| -> Result<SshdMessage> { message.try_into() })
-		.filter_map(Result::ok)
-		.map(|message: SshdMessage| -> Result<FailedLoginSshdMessage> { message.try_into() })
-		.filter_map(Result::ok)
+		.filter(|event: &amalgam::Event| match event.kind() {
+			amalgam::EventKind::Sshd(Some(_)) => true,
+			_ => false,
+		})
+		.inspect(|e| println!("Event: {:?}", e))
 		.collect();
 
-	println!("{}", failed_logins.len());
+	println!("{}", events.len());
 
 	Ok(())
 }

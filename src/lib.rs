@@ -2,107 +2,148 @@ use config::ConfigError;
 use core::fmt::{self, Debug, Display, Formatter};
 use core::result;
 use std::error;
+use std::net::{IpAddr, SocketAddr};
 
 #[derive(Debug)]
-pub struct Message {
-	timestamp: chrono::DateTime<chrono::Utc>,
-	message: String,
-	ident: String,
-	raw: serde_json::Value,
+pub struct Login {
+	host: SocketAddr,
+	user: String,
+}
+
+lazy_static::lazy_static! {
+	static ref SSHD_LOGIN_RE: regex::Regex = regex::Regex::new(r"(?P<action>Failed|Accepted) (?P<thing>password|publickey|none) for (invalid user )?(?P<user>\w+) from (?P<host>[a-f\d:\.]+) port (?P<port>\d+)").unwrap();
+}
+
+impl std::str::FromStr for SshdEventKind {
+	type Err = Error;
+
+	fn from_str(s: &str) -> Result<SshdEventKind> {
+		use SshdEventKind::*;
+
+		let captures: regex::Captures = SSHD_LOGIN_RE
+			.captures(s)
+			.ok_or(Error::MalformedEvent(format!("{} did not match regex", s)))?;
+
+		let action: Option<&str> = captures.name("action").map(Into::into);
+		let thing: Option<&str> = captures.name("thing").map(Into::into);
+		let user: Option<&str> = captures.name("user").map(Into::into);
+		let host: Option<&str> = captures.name("host").map(Into::into);
+		let port: Option<&str> = captures.name("port").map(Into::into);
+
+		match (action, thing, user, host, port) {
+			(Some("Failed"), _, Some(user), Some(host), Some(port))
+			| (Some("Accepted"), _, Some(user), Some(host), Some(port)) => {
+				let host: IpAddr = host.parse::<IpAddr>().unwrap();
+				let port: u16 = port.parse::<u16>().unwrap();
+
+				let host: SocketAddr = SocketAddr::new(host, port);
+				let user: String = user.to_string();
+
+				let login: Login = Login { host, user };
+				Ok(match action {
+					Some("Failed") => FailedLogin(login),
+					Some("Accepted") => SuccessfulLogin(login),
+					_ => unreachable!(),
+				})
+			}
+			_ => todo!(),
+		}
+	}
 }
 
 #[derive(Debug)]
-pub struct SshdMessage(Message);
-
-#[derive(Debug)]
-pub struct FailedLoginSshdMessage(SshdMessage);
+pub enum SshdEventKind {
+	FailedLogin(Login),
+	SuccessfulLogin(Login),
+}
 
 #[derive(Debug)]
 pub enum EventKind {
-	FailedLogin,
-	SuccessfulLogin,
+	Sshd(Option<SshdEventKind>),
 }
 
 #[derive(Debug)]
 pub struct Event {
+	ident: String,
 	kind: EventKind,
-	message: Message,
+	raw: serde_json::Value,
+	time: chrono::DateTime<chrono::Utc>,
 }
 
-impl core::convert::TryFrom<Message> for SshdMessage {
-	type Error = Error;
-
-	fn try_from(msg: Message) -> Result<SshdMessage> {
-		match msg.ident.as_str() {
-			"sshd" => Ok(SshdMessage(msg)),
-			_ => Err(Error::WrongUnit(msg.ident)),
-		}
+impl Event {
+	pub fn kind(&self) -> &EventKind {
+		&self.kind
 	}
 }
 
-impl core::convert::TryFrom<SshdMessage> for FailedLoginSshdMessage {
-	type Error = Error;
+fn realtime_timestamp_to_datetime<Tz>(ts: &str) -> chrono::DateTime<Tz>
+where
+	Tz: chrono::offset::TimeZone,
+	chrono::DateTime<Tz>: core::convert::From<chrono::DateTime<chrono::Utc>>,
+{
+	let ts: u64 = ts.parse().unwrap();
 
-	fn try_from(msg: SshdMessage) -> Result<FailedLoginSshdMessage> {
-		let message: &String = &msg.0.message;
+	use core::convert::TryInto;
+	let secs: i64 = (ts / 1_000_000).try_into().unwrap();
+	let nanos: u32 = (ts % 1_000_000).try_into().unwrap();
 
-		if message.starts_with("Failed") {
-			Ok(FailedLoginSshdMessage(msg))
-		} else {
-			Err(Error::NotFailedLogin(msg))
-		}
-	}
+	use chrono::offset::TimeZone;
+	chrono::Utc.timestamp(secs, nanos).into()
 }
 
-impl core::convert::TryFrom<serde_json::Value> for Message {
+impl core::convert::TryFrom<serde_json::Value> for Event {
 	type Error = Error;
 
-	fn try_from(raw: serde_json::Value) -> Result<Message> {
-		let k: &serde_json::Map<String, serde_json::Value> = match &raw {
+	fn try_from(raw: serde_json::Value) -> Result<Event> {
+		let obj: &serde_json::Map<String, serde_json::Value> = match &raw {
 			serde_json::Value::Object(obj) => obj,
 			_ => unimplemented!(),
 		};
 
-		let timestamp: String = k
+		let time: &str = obj
 			.get("__REALTIME_TIMESTAMP")
-			.ok_or(Error::MalformedMessage("missing timestamp"))?
+			.ok_or(Error::MalformedEvent("missing timestamp".to_string()))?
 			.as_str()
-			.unwrap()
-			.to_string();
-		let timestamp: u64 = timestamp
-			.parse()
-			.or(Err(Error::MalformedMessage("malformed timestamp")))?;
+			.unwrap();
 
-		use core::convert::TryInto;
-		let secs: i64 = (timestamp / 1_000_000).try_into().unwrap();
-		let nanos: u32 = (timestamp % 1_000_000).try_into().unwrap();
+		let time: chrono::DateTime<chrono::Utc> = realtime_timestamp_to_datetime(time);
 
-		use chrono::offset::TimeZone;
-		let timestamp: chrono::DateTime<chrono::Utc> = chrono::Utc.timestamp(secs, nanos);
-
-		let message: String = k
-			.get("MESSAGE")
-			.ok_or(Error::MalformedMessage("missing message"))?
-			.as_str()
-			.unwrap()
-			.to_string();
-
-		let ident: String = k
+		let ident: String = obj
 			.get("SYSLOG_IDENTIFIER")
-			.ok_or(Error::MalformedMessage("missing syslog identifier"))?
+			.ok_or(Error::MalformedEvent(
+				"missing syslog identifier".to_string(),
+			))?
 			.as_str()
 			.unwrap()
 			.to_string();
 
-		Ok(Message {
+		let kind: EventKind = match ident.as_str() {
+			"sshd" => {
+				use EventKind::Sshd;
+
+				let message: &str = obj
+					.get("MESSAGE")
+					.ok_or(Error::MalformedEvent("missing message field".to_string()))?
+					.as_str()
+					.unwrap();
+
+				if let Ok(sek) = message.parse::<SshdEventKind>() {
+					Sshd(Some(sek))
+				} else {
+					Sshd(None)
+				}
+			}
+			_ => unimplemented!(),
+		};
+
+		Ok(Event {
 			ident,
-			message,
-			timestamp,
-			raw
+			kind,
+			raw,
+			time,
 		})
 	}
 }
-
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum Error {
@@ -111,9 +152,7 @@ pub enum Error {
 	InvalidNetAddr(String),
 	Io(std::io::Error),
 	Json(serde_json::error::Error),
-	MalformedMessage(&'static str),
-	NotFailedLogin(SshdMessage),
-	WrongUnit(String),
+	MalformedEvent(String),
 }
 
 impl Display for Error {
@@ -127,9 +166,7 @@ impl Display for Error {
 				Self::InvalidNetAddr(e) => format!("invalid netaddr: {}", e),
 				Self::Io(e) => format!("input/output error: {}", e),
 				Self::Json(e) => format!("json parse error: {}", e),
-				Self::MalformedMessage(e) => format!("malformed message: {}", e),
-				Self::NotFailedLogin(e) => format!("not a failed login: {:?}", e),
-				Self::WrongUnit(e) => format!("wrong unit: {}", e),
+				Self::MalformedEvent(e) => format!("malformed message: {}", e),
 			}
 		)
 	}
