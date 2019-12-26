@@ -97,7 +97,6 @@ where
 {
 	let ts: u64 = ts.parse().unwrap();
 
-	use core::convert::TryInto;
 	let secs: i64 = (ts / 1_000_000).try_into().unwrap();
 	let nanos: u32 = (ts % 1_000_000).try_into().unwrap();
 
