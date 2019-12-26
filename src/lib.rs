@@ -1,6 +1,9 @@
+use chrono::{DateTime, TimeZone, Utc};
 use config::ConfigError;
+use core::convert::{TryFrom, TryInto};
 use core::fmt::{self, Debug, Display, Formatter};
 use core::result;
+use regex::{Captures, Regex};
 use std::error;
 use std::net::{IpAddr, SocketAddr};
 
@@ -10,17 +13,27 @@ pub struct Login {
 	user: String,
 }
 
+const SSHD_LOGIN: &'static str = "(?P<action>Failed|Accepted) \
+                                  (?P<thing>password|publickey|none) \
+                                  for \
+                                  (invalid user )?\
+                                  (?P<user>\\w+) \
+                                  from \
+                                  (?P<host>[a-f\\d:\\.]+) \
+                                  port \
+                                  (?P<port>\\d+)";
+
 lazy_static::lazy_static! {
-	static ref SSHD_LOGIN_RE: regex::Regex = regex::Regex::new(r"(?P<action>Failed|Accepted) (?P<thing>password|publickey|none) for (invalid user )?(?P<user>\w+) from (?P<host>[a-f\d:\.]+) port (?P<port>\d+)").unwrap();
+	static ref SSHD_LOGIN_RE: Regex = Regex::new(SSHD_LOGIN).unwrap();
 }
 
-impl std::str::FromStr for SshdEventKind {
+impl core::str::FromStr for SshdEventKind {
 	type Err = Error;
 
 	fn from_str(s: &str) -> Result<SshdEventKind> {
 		use SshdEventKind::*;
 
-		let captures: regex::Captures = SSHD_LOGIN_RE
+		let captures: Captures = SSHD_LOGIN_RE
 			.captures(s)
 			.ok_or(Error::MalformedEvent(format!("{} did not match regex", s)))?;
 
@@ -67,7 +80,7 @@ pub struct Event {
 	ident: String,
 	kind: EventKind,
 	raw: serde_json::Value,
-	time: chrono::DateTime<chrono::Utc>,
+	time: DateTime<Utc>,
 }
 
 impl Event {
@@ -76,10 +89,10 @@ impl Event {
 	}
 }
 
-fn realtime_timestamp_to_datetime<Tz>(ts: &str) -> chrono::DateTime<Tz>
+fn realtime_timestamp_to_datetime<Tz>(ts: &str) -> DateTime<Tz>
 where
-	Tz: chrono::offset::TimeZone,
-	chrono::DateTime<Tz>: core::convert::From<chrono::DateTime<chrono::Utc>>,
+	Tz: TimeZone,
+	DateTime<Tz>: From<DateTime<Utc>>,
 {
 	let ts: u64 = ts.parse().unwrap();
 
@@ -87,11 +100,10 @@ where
 	let secs: i64 = (ts / 1_000_000).try_into().unwrap();
 	let nanos: u32 = (ts % 1_000_000).try_into().unwrap();
 
-	use chrono::offset::TimeZone;
-	chrono::Utc.timestamp(secs, nanos).into()
+	Utc.timestamp(secs, nanos).into()
 }
 
-impl core::convert::TryFrom<serde_json::Value> for Event {
+impl TryFrom<serde_json::Value> for Event {
 	type Error = Error;
 
 	fn try_from(raw: serde_json::Value) -> Result<Event> {
@@ -106,7 +118,7 @@ impl core::convert::TryFrom<serde_json::Value> for Event {
 			.as_str()
 			.unwrap();
 
-		let time: chrono::DateTime<chrono::Utc> = realtime_timestamp_to_datetime(time);
+		let time: DateTime<Utc> = realtime_timestamp_to_datetime(time);
 
 		let ident: String = obj
 			.get("SYSLOG_IDENTIFIER")
