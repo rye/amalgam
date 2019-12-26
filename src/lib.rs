@@ -8,6 +8,7 @@ pub struct Message {
 	timestamp: chrono::DateTime<chrono::Utc>,
 	message: String,
 	ident: String,
+	raw: serde_json::Value,
 }
 
 #[derive(Debug)]
@@ -15,6 +16,18 @@ pub struct SshdMessage(Message);
 
 #[derive(Debug)]
 pub struct FailedLoginSshdMessage(SshdMessage);
+
+#[derive(Debug)]
+pub enum EventKind {
+	FailedLogin,
+	SuccessfulLogin,
+}
+
+#[derive(Debug)]
+pub struct Event {
+	kind: EventKind,
+	message: Message,
+}
 
 impl core::convert::TryFrom<Message> for SshdMessage {
 	type Error = Error;
@@ -44,8 +57,8 @@ impl core::convert::TryFrom<SshdMessage> for FailedLoginSshdMessage {
 impl core::convert::TryFrom<serde_json::Value> for Message {
 	type Error = Error;
 
-	fn try_from(v: serde_json::Value) -> Result<Message> {
-		let k: serde_json::Map<String, serde_json::Value> = match v {
+	fn try_from(raw: serde_json::Value) -> Result<Message> {
+		let k: &serde_json::Map<String, serde_json::Value> = match &raw {
 			serde_json::Value::Object(obj) => obj,
 			_ => unimplemented!(),
 		};
@@ -85,6 +98,7 @@ impl core::convert::TryFrom<serde_json::Value> for Message {
 			ident,
 			message,
 			timestamp,
+			raw
 		})
 	}
 }
