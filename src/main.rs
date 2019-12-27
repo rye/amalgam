@@ -27,40 +27,16 @@ fn main() -> Result<()> {
 		)
 		.get_matches();
 
-	// Order of preference (ascending):
-	// - Defaults
-	// - Environment-specified things
-	// - Config file specified things
-	// - Argument-specified things
 	let mut settings = config::Config::default();
 
-	// Set defaults
 	settings.set_default("input.type", "journald-json")?;
 	settings.set_default("networks.allowed", vec!["127.0.0.0/8"])?;
 
-	// Load from the environment
 	settings.merge(config::Environment::with_prefix("AMALGAM"))?;
 
-	// Load from config file, if specified.
 	if let Some(config) = argument_settings.value_of("config") {
 		settings.merge(config::File::with_name(config))?;
 	}
-
-	// (If anything in argument_settings gets specified, those go here.)
-
-	// Finally, `settings` is now ready for consumption.
-
-	println!(
-		"{:?}",
-		settings.get_str("input.type")?.parse::<InputType>()?
-	);
-
-	// Load up requisite stream
-
-	// Stream events as follows:
-	// - Read a line
-	// - Parse into Event
-	// - Check to see if allowed
 
 	let events: Vec<Event> = stdin()
 		.lock()
