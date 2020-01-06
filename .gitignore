@@ -2,3 +2,5 @@
 /target
 
 *.json
+/malicious_clients-*
+/blocks-*
